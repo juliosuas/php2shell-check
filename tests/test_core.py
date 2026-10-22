@@ -36,3 +36,9 @@ def test_local(monkeypatch, capsys):
     monkeypatch.setattr(probe, "local", lambda php="php": ("8.5.11", "cli", "PHP 8.5.11 (cli)"))
     assert cli.main(["--local"]) == 2
     assert "VULNERABLE" in capsys.readouterr().out
+
+
+def test_url_without_consent_exits_3_not_vulnerable_code():
+    import subprocess, sys
+    r = subprocess.run([sys.executable, "-m", "php2shell_check", "--url", "https://example.invalid"], capture_output=True, text=True)
+    assert r.returncode == 3

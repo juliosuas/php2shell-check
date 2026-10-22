@@ -16,7 +16,9 @@ python3 -m php2shell_check --url https://my.host --i-own-this-host
 python3 -m php2shell_check --version-string "$(dpkg-query -W -f='${Version}' php8.1-fpm)"
 python3 -m php2shell_check --local --sapi fpm-fcgi --json
 ```
-Exit codes: 0 fixed, 1 unknown, 2 vulnerable.
+Exit codes: 0 fixed, 1 unknown, 2 vulnerable, 3 usage error.
+
+Run tests from the repo root with `pytest` (configured in `pyproject.toml`), or `pip install -e .` to get the `php2shell-check` command.
 
 ## What it detects / does not
 - Detects: version from `php` CLI, `X-Powered-By`/`Server` headers, or a supplied package version string; SAPI risk.

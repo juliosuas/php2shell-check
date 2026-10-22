@@ -1,10 +1,17 @@
 import argparse, json, sys
+
+
+class _Parser(argparse.ArgumentParser):
+    """Usage errors exit 3 so they never collide with exit 2 (VULNERABLE)."""
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(3, f"{self.prog}: error: {message}\n")
 from . import core, probe
 
 NOTE = "Only scan hosts you own or are explicitly authorized to test."
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="php2shell-check", description="Defensive checker for PHP2Shell (CVE-2026-109618/109619). " + NOTE)
+    p = _Parser(prog="php2shell-check", description="Defensive checker for PHP2Shell (CVE-2026-109618/109619). " + NOTE)
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--local", action="store_true", help="inspect the local php binary")
     g.add_argument("--url", help="explicit URL of a host you own (reads X-Powered-By/Server headers)")
