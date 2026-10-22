@@ -14,7 +14,9 @@ SAPI_RISK = {
     "cli": "low (CLI does not serve web requests; check the web SAPI separately)",
 }
 _VER = re.compile(r"(\d+)\.(\d+)\.(\d+)([^\s;,()]*)")
-_DISTRO = re.compile(r"(ubuntu|deb|el\d|\.el|fc\d|amzn|suse|alpine|-r\d|\+|~|sury|remi)", re.I)
+# Applied ONLY to the PHP version suffix (never Server headers/banners).
+# A digit may precede (Debian style "-1ubuntu2", "-1+deb11u7").
+_DISTRO = re.compile(r"(?:^|[-+~.\d])(deb\d|ubuntu|el\d+|fc\d+|amzn|suse|r\d+|sury|remi)", re.I)
 
 
 def parse_version(text):
@@ -25,14 +27,14 @@ def parse_version(text):
     return (int(m.group(1)), int(m.group(2)), int(m.group(3))), m.group(4)
 
 
-def detect_distro_build(suffix, extra=""):
-    return bool(_DISTRO.search((suffix or "") + " " + (extra or "")))
+def detect_distro_build(suffix):
+    return bool(_DISTRO.search(suffix or ""))
 
 
-def classify(version, suffix="", extra=""):
+def classify(version, suffix=""):
     """Return dict(status, reason). status in fixed|vulnerable|unknown."""
     major_minor = version[:2]
-    distro = detect_distro_build(suffix, extra)
+    distro = detect_distro_build(suffix)
     if version < (5, 4, 0):
         return {"status": "unknown", "reason": "Older than 5.4; not listed in public advisories. Unsupported anyway: upgrade."}
     if major_minor in FIXED:
@@ -62,17 +64,20 @@ MITIGATION = [
 ]
 
 
-def build_report(target, method, raw_version, sapi=None, extra=""):
+def build_report(target, method, raw_version, sapi=None, extra="", reason=None):
     parsed = parse_version(raw_version)
     rep = {"target": target, "method": method, "cves": CVES, "raw_version": raw_version, "sapi": sapi}
     if not parsed:
-        rep.update(status="unknown", reason="PHP version not detected (header hidden or PHP absent). Check on the host with php -v.",
+        rep.update(status="unknown", reason="PHP version not detected. Absence does NOT mean FIXED: a CDN/proxy or expose_php=Off can hide it. "
+                   "Check on the host (php -v, php-fpm -v, package manager).",
                    version=None, sapi_risk=None)
     else:
         v, suffix = parsed
         rep["version"] = "%d.%d.%d%s" % (v + (suffix,))
-        rep.update(classify(v, suffix, extra))
+        rep.update(classify(v, suffix))
         rep["sapi_risk"] = SAPI_RISK.get((sapi or "").lower(), "unknown SAPI" if sapi else "not detected")
+    if reason and rep["status"] == "unknown" and not parsed:
+        rep["reason"] = reason
     rep["mitigation"] = MITIGATION if rep["status"] != "fixed" else ["Patched per version string. Confirm workers were restarted."]
     return rep
 
@@ -86,3 +91,24 @@ def to_text(rep):
              "  reason : %s" % rep["reason"], "  mitigation:"]
     lines += ["    - " + m for m in rep["mitigation"]]
     return "\n".join(lines)
+
+
+RANK = {"fixed": 0, "unknown": 1, "vulnerable": 2}
+
+
+def worst(reports):
+    return max((r["status"] for r in reports), key=RANK.get, default="unknown")
+
+
+def combine(target, method, reports, note=None):
+    out = {"target": target, "method": method, "status": worst(reports), "runtimes": reports}
+    if note:
+        out["note"] = note
+    return out
+
+
+def combined_text(c):
+    head = ["== %s (%s): overall %s ==" % (c["target"], c["method"], c["status"].upper())]
+    if c.get("note"):
+        head.append("NOTE: " + c["note"])
+    return "\n\n".join(["\n".join(head)] + [to_text(r) for r in c["runtimes"]])

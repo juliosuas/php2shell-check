@@ -22,18 +22,44 @@ def main(argv=None):
     p.add_argument("--json", action="store_true", help="JSON output")
     a = p.parse_args(argv)
     if a.local:
-        ver, sapi, banner = probe.local(a.php)
-        rep = core.build_report("localhost", "local-cli", ver or "", a.sapi or sapi, banner or "")
+        if a.sapi:
+            ver, sapi, banner = probe.local(a.php)
+            reps = [core.build_report("cli (%s)" % a.php, "local-cli", ver or "", a.sapi)]
+            note = "SAPI forced via --sapi"
+        else:
+            rts = probe.local_runtimes(a.php)
+            reps = []
+            for r in rts:
+                rr = core.build_report(r["label"], "local", r["raw"], r["sapi"])
+                if r["sapi"] == "apache2handler" and not r["raw"]:
+                    rr["reason"] = ("mod_php present but its version can't be read from the module. "
+                                    "Check the package: dpkg -l 'libapache2-mod-php*' / rpm -q php.")
+                reps.append(rr)
+            web = [r for r in rts if r["sapi"] != "cli"]
+            note = None if web else "CLI only, web SAPI not checked (no php-fpm or mod_php found)"
+        rep = core.combine("localhost", "local", reps, note)
+        out = json.dumps(rep, indent=2) if a.json else core.combined_text(rep)
     elif a.url:
         if not a.i_own_this_host:
             p.error("--url requires --i-own-this-host. " + NOTE)
-        xpb, server = probe.http(a.url)
-        raw = xpb if "php" in xpb.lower() else (server if "php" in server.lower() else "")
-        rep = core.build_report(a.url, "http-headers", raw, a.sapi, xpb + " " + server)
-        rep["headers"] = {"X-Powered-By": xpb, "Server": server}
+        xpbs, server, err = probe.http(a.url)
+        php_vals = [x for x in xpbs if "php" in x.lower()]
+        if not php_vals and "php" in server.lower():
+            php_vals = [server]
+        if err:
+            reps = [core.build_report(a.url, "http-headers", "", a.sapi, reason="Could not fetch: %s" % err)]
+        elif not php_vals:
+            reps = [core.build_report(a.url, "http-headers", "", a.sapi)]
+        else:
+            reps = [core.build_report(a.url, "http-headers", v, a.sapi) for v in php_vals]
+        for r in reps:
+            r["headers"] = {"X-Powered-By": xpbs, "Server": server}
+        rep = core.combine(a.url, "http-headers", reps) if len(reps) > 1 else reps[0]
+        out = json.dumps(rep, indent=2) if a.json else (core.combined_text(rep) if len(reps) > 1 else core.to_text(rep))
     else:
-        rep = core.build_report("offline", "version-string", a.version_string, a.sapi, a.version_string)
-    print(json.dumps(rep, indent=2) if a.json else core.to_text(rep))
+        rep = core.build_report("offline", "version-string", a.version_string, a.sapi)
+        out = json.dumps(rep, indent=2) if a.json else core.to_text(rep)
+    print(out)
     return {"fixed": 0, "vulnerable": 2, "unknown": 1}[rep["status"]]
 
 if __name__ == "__main__":

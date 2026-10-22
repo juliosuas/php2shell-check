@@ -21,10 +21,17 @@ Exit codes: 0 fixed, 1 unknown, 2 vulnerable, 3 usage error.
 Run tests from the repo root with `pytest` (configured in `pyproject.toml`), or `pip install -e .` to get the `php2shell-check` command.
 
 ## What it detects / does not
+- `--local` (no `--sapi`) checks every runtime it finds: CLI, `php-fpm*` binaries (`php-fpm -v`, `php-fpm8.3`, ...),
+  and Apache mod_php (`apachectl/apache2ctl/httpd -M`, `libphp*.so` in common module dirs). Worst status sets the exit code.
+  If no web SAPI is found the report says **"CLI only, web SAPI not checked"**.
+- mod_php's version can't be read from the module: reported UNKNOWN; check the package (`dpkg -l 'libapache2-mod-php*'`, `rpm -q php`).
+- Distro detection looks only at the PHP version suffix (`-1ubuntu2.20`, `+deb11u7`, `.el9`), never at `Server:` headers.
+- Missing `X-Powered-By` is UNKNOWN, never FIXED: CDNs/proxies or `expose_php=Off` hide it.
+- Network/DNS/TLS/timeouts -> UNKNOWN with the cause. Usage errors exit 3.
 - Detects: version from `php` CLI, `X-Powered-By`/`Server` headers, or a supplied package version string; SAPI risk.
 - `unknown — check distro advisory` when a distro build (Debian/Ubuntu/RHEL/sury/remi…) is below the upstream fix, since backports keep the old upstream number.
 - Does NOT: test exploitability, see hidden headers (`expose_php=Off`), confirm workers were restarted, inspect bundled PHP in appliances, or know distro backport versions.
-- The CLI SAPI is not the web SAPI: check `php-fpm -v` / Apache module too.
+- Does not find PHP in containers, chroots, non-standard paths, or PHP-FPM pools that aren't installed as binaries on PATH/sbin.
 
 ## Tests
 `python3 -m pytest -q`
