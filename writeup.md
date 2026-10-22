@@ -1,0 +1,7 @@
+# Nota técnica: php2shell-check — Julio César Suástegui (borrador)
+
+**ES.** El 21 oct 2026 PHP publicó parches para CVE-2026-109618 (corrupción de memoria tras OOM durante la limpieza del request) y CVE-2026-109619 (estado global obsoleto reutilizado por otro request en el mismo worker). Ambos son RCE sin autenticación (CVSS v4 9.2) en instalaciones que sirven web: FPM, mod_php (mayor riesgo), php-cgi, FrankenPHP y LiteSpeed. Versiones corregidas: 8.5.12, 8.4.27, 8.3.36, 8.2.35. `php2shell-check` es una herramienta defensiva y solo de lectura: lee versión y SAPI (CLI local, cabeceras HTTP o cadena de paquete), compara con esas versiones y entrega un reporte de mitigación en texto/JSON. Si un paquete de distro tiene número upstream viejo, marca "unknown — revisar advisory de la distro" en vez de adivinar. No prueba explotabilidad ni contiene payloads. Parchear y reiniciar workers es la única corrección completa.
+
+**EN (LinkedIn).** PHP2Shell (CVE-2026-109618/109619) are critical unauthenticated RCEs in PHP's request lifecycle, fixed in 8.5.12 / 8.4.27 / 8.3.36 / 8.2.35. I built php2shell-check, a small stdlib-only, read-only tool to inventory your own hosts: it reads PHP version + SAPI, flags vulnerable/fixed/unknown (distro backports are reported as "check your vendor advisory", not guessed), and prints mitigation steps. No exploit code. Patch, restart workers, rebuild images.
+
+Sources: CISA alert (2026-10-21), NCSC-NL php2shell repo, Datadog Security Labs, Google Cloud blog.
